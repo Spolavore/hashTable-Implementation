@@ -6,6 +6,8 @@ class NodoLista:
         self.proximo = proximo_nodo
 
 class ListaEncadeada:
+    lista_consultas = []
+
     def __init__(self):
         self.inicio = None  
 
@@ -13,25 +15,25 @@ class ListaEncadeada:
         novoNodo = NodoLista(novo_id, novo_content)
         novoNodo.proximo = self.inicio
         self.inicio = novoNodo
-
-    # Função que verifica se um jogador já está na lista com base no seu id
-    # -> não está sendo utilizada pois não há jogadores repetidos
-    def isIn(self, id):
+ 
+    def tamanho_lista(self):
+        contador = 0
         aux = self.inicio
-        while(aux != None):
-            if aux.id == id:
-                return True
-            else:
-                aux = aux.proximo
+        while(aux != None): 
+            contador+=1           
+            aux = aux.proximo
+        return contador
 
     def getInfos(self, id):
+        qtd_consultas = 0
         aux = self.inicio
         while aux != None:
             if aux.id == id:
-                return aux
+                ListaEncadeada.lista_consultas.append(qtd_consultas)                
+                return (aux, qtd_consultas)
             else:
                 aux = aux.proximo
-        return False # caso não haja o jogador
+                qtd_consultas+=1
 
     def printa_lista(self):
         aux = self.inicio
@@ -42,16 +44,21 @@ class ListaEncadeada:
 # Definicao da class hash,
 # recebe na inicializacao o tamanho dela
 class Hash:
+    posicoes_usadas = []
+    
     def __init__(self, tamanho):
         self.tamanho = tamanho
-        self.hash_table = [ListaEncadeada()] * self.tamanho # lista de listas encadeadas
+        self.hash_table = [ListaEncadeada() for i in range(self.tamanho)] # cria uma lista de listas encadeadas independentes
      
-
+    
 
 # Função de Hash para definir o local, retorna a key de onde o valor
 # está ou deve ser inserido
     def get_position(self, id):
         key = (id % self.tamanho) # modulo do id pelo tamanho
+        if key not in Hash.posicoes_usadas:
+            Hash.posicoes_usadas.append(key)
+
         return key
         
    
@@ -73,24 +80,66 @@ class Hash:
     # Com base no id vai para o posicao do array especifico
     # E Posteriormente chama uma funcao da propria classe da lista Encadeada 
     # para consultar se o elemento esta naquela lista
-    def consulta(self, id):
+    def consulta(self, id, arquivo):
         position = self.get_position(id)
-        nodo = self.hash_table[position].getInfos(id)
+        nodo_aux = self.hash_table[position].getInfos(id)
+        nodo = nodo_aux[0] if nodo_aux else None
         if nodo: # se o nodo não for false
-            print(f'{nodo.id} {nodo.content[0]}')
+            arquivo.write(f'{nodo.id} {nodo.content[0]} {nodo_aux[1]}\n')
+        else:
+            arquivo.write(f'{id} MISS\n')
         
     
 if __name__ == '__main__':
 
-    tabela_hash = Hash(1000) # definicao do tamanho da tabela hash
+    tamanho = int(input("Informe o tamanho da tabela hash: 1000, 2000, 4000 ou 8000: ")) # definicao do tamanho da tabela hash para os valores pré-estabelecidos 1000,2000,4000,8000
+    tamanho = tamanho if tamanho in [1000,2000,4000,8000] else 1000                      # se for algum valor diferente, usa o tamanho = 1000 como padrão
+    tabela_hash = Hash(tamanho)                                     
+                                
 
     with open('players.csv', 'r') as file: # lendo o players.csv e colocando no Hash
-        txt = file.read().split('\n')
-        for i in range(1, len(txt)):
-            data = txt[i].split(',')
+        next(file)                         #Ignora a primeira linha
+        for linha in file:
+            data = linha.split(',', 2)
             tabela_hash.add(data)
+    
+    entradas_usadas = len(Hash.posicoes_usadas)            #Qtd de entradas usadas
+    entradas_vazias = tamanho - len(Hash.posicoes_usadas)  #Qtd de entradas vazias
+    taxa_de_ocupacao = entradas_usadas/entradas_vazias if entradas_vazias != 0 else entradas_usadas
+    min_tamanho_de_lista = float("inf")
+    max_tamanho_de_lista = float("-inf")
+    medio_tamanho_de_lista = 0
+    for lista in tabela_hash.hash_table:                #Percorre todas as listas encadeadas da tabela hash e calcula qual a maior e a menor lista
+        tamanho_da_lista_atual = lista.tamanho_lista()
+        medio_tamanho_de_lista += tamanho_da_lista_atual/tamanho
+        if tamanho_da_lista_atual > max_tamanho_de_lista:
+            max_tamanho_de_lista = tamanho_da_lista_atual
+        if tamanho_da_lista_atual < min_tamanho_de_lista:
+            min_tamanho_de_lista = tamanho_da_lista_atual  
+    
 
-    with open('consultas-fifa.txt', 'r') as consultas:  # fazendo as consultas necessarias
-        searchs = consultas.readlines()
-        for i in range(0, len(searchs)):
-            tabela_hash.consulta(int(searchs[i][0:len(searchs[i])-1]))
+    with open('experimento' + str(tamanho)+'.txt', 'w') as arq:
+        arq.write('PARTE 1: ESTATISTICAS DA TABELA HASH \n')
+        arq.write('NUMERO DE ENTRADAS DA TABELA USADAS '+ str(entradas_usadas) + '\n')
+        arq.write('NUMERO DE ENTRADAS DA TABELA VAZIAS '+ str(entradas_vazias) + '\n')
+        arq.write('TAXA DE OCUPACAO ' + str(taxa_de_ocupacao) + '\n')
+        arq.write('MINIMO TAMANHO DE LISTA ' + str(min_tamanho_de_lista) + '\n')
+        arq.write('MAXIMO TAMANHO DE LISTA ' + str(max_tamanho_de_lista) + '\n')
+        arq.write('MEDIO TAMANHO DE LISTA ' + str(medio_tamanho_de_lista) + '\n')
+
+        arq.write('PARTE 2: ESTATISTICAS DAS CONSULTAS \n')
+
+        with open('consultas-fifa.txt', 'r') as consultas:  # fazendo as consultas necessarias
+
+            for linha in consultas:
+                tabela_hash.consulta(int(linha), arq)
+
+        lista_quantidade_consultas = ListaEncadeada.lista_consultas
+        min_nro_testes = min(lista_quantidade_consultas)
+        max_nro_testes = max(lista_quantidade_consultas)
+        media_nro_testes = sum(lista_quantidade_consultas)/len(lista_quantidade_consultas)
+        media_consultas = sum(set(lista_quantidade_consultas))/len(set(lista_quantidade_consultas))
+        arq.write('MINIMO NUMERO DE TESTES POR NOME ENCONTRADO ' + str(min_nro_testes) + '\n')
+        arq.write('MAXIMO NUMERO DE TESTES POR NOME ENCONTRADO ' + str(max_nro_testes) + '\n')
+        arq.write('MEDIA NUMERO DE TESTES NOME ENCONTRADO ' + str(media_nro_testes) + '\n')
+        arq.write('MEDIA DAS CONSULTAS ' + str(media_consultas))
